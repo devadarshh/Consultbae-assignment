@@ -17,7 +17,7 @@ export const config = {
   maxUploadBytes: int(process.env.MAX_UPLOAD_BYTES, 25 * 1024 * 1024), // 25 MB default
   llm: {
     baseUrl: process.env.N8N_LLM_BASE_URL ?? 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: process.env.N8N_LLM_MODEL ?? 'gemini-2.0-flash',
+    model: process.env.N8N_LLM_MODEL ?? 'gemini-3.6-flash',
   },
 };
 

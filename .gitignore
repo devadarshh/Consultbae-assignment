@@ -23,4 +23,5 @@ prisma/dev.db
 
 # editor
 .vscode/
-.idea/
+.idea/n8n/.user/
+uploads/*.wav
