@@ -23,5 +23,7 @@ prisma/dev.db
 
 # editor
 .vscode/
-.idea/n8n/.user/
-uploads/*.wav
+.idea/
+
+# n8n runtime data (SQLite DB, cache, keys)
+n8n/.user/
