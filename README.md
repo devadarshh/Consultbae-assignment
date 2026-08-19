@@ -88,7 +88,19 @@ npm run n8n                     # start n8n (reads .env, allows $env in nodes)
 # Workflows → import n8n/skill-categorization.json, open it, and "Execute workflow".
 ```
 
-The workflow uses `$env.GEMINI_API_KEY`, so the only setup is pasting your key in `.env`. If n8n runs elsewhere, set the same env var there. The current model is `gemini-3.6-flash` (`gemini-2.0-flash` was retired by Google).
+The workflow uses `$env.GEMINI_API_KEY`, so the only setup is pasting your key in `.env`. If n8n runs elsewhere, set the same env var there. The current model is `gemini-3.6-flash` (`gemini-2.0-flash` was retired by Google). The LLM URL can be overridden with `LLM_URL` (handy for pointing at a proxy or a local mock).
+
+### Verifying without consuming Gemini quota
+
+The Gemini free tier is throttled (~5–20 req/min), which can block quick test runs. `scripts/mock-llm.ts` is a tiny OpenAI-compatible mock used to verify the workflow end-to-end (read → LLM → parse → write) without hitting the API:
+
+```bash
+npx tsx scripts/mock-llm.ts &                 # http://localhost:9999
+LLM_URL=http://localhost:9999/v1beta/openai/chat/completions \
+  npx n8n execute --id=<workflow-id>
+```
+
+The workflow itself was verified against this mock (56/56 candidates written); a live Gemini run needs the quota window to be free.
 
 ## Task 3 — Audio collection app
 

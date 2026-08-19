@@ -47,7 +47,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "url": "={{ $env.LLM_URL || 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
