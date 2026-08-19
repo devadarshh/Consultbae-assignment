@@ -44,6 +44,12 @@ async function main() {
     await tx.person.deleteMany();
     await tx.skill.deleteMany();
 
+    // Reset auto-increment sequences so a fresh ingest produces ids 1..N.
+    // PersonSkill has a composite key (no id sequence), so it is skipped.
+    for (const table of ['Person', 'SourceRecord', 'Skill', 'AudioSubmission', 'SkillClassification']) {
+      await tx.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"${table}"', 'id'), 1, false)`);
+    }
+
     const skillNameToId = new Map<string, number>();
 
     for (const person of result.people) {
