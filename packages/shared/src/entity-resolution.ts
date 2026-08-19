@@ -18,15 +18,38 @@
  *   - the two "Arjun Mehta"s (Noida) — different phones and disjoint skills
  *   - the two "Deepak Nair"s — different cities
  */
+import { normalizeCity, normalizeEmail, normalizeName, normalizePhone } from './normalize';
 import type { PersonGroup, RejectedMatch, ResolutionResult, SourceRecord } from './types';
 
-function normNameKey(r: SourceRecord): string {
-  return r.name.toLowerCase();
+/**
+ * A normalized "key" view of each record. The source parsers already normalize, but
+ * resolving defensively makes this module self-contained and safe for any caller.
+ * `index` is the record's position in the input array — union-find is indexed by it.
+ */
+interface KeyedRecord {
+  record: SourceRecord;
+  index: number;
+  email: string | null;
+  phone: string | null;
+  nameKey: string;
+  cityKey: string | null;
+}
+
+function keyRecords(records: SourceRecord[]): KeyedRecord[] {
+  return records.map((r, i) => ({
+    record: r,
+    index: i,
+    email: normalizeEmail(r.email),
+    phone: normalizePhone(r.phone),
+    nameKey: normalizeName(r.name).toLowerCase(),
+    cityKey: normalizeCity(r.city),
+  }));
 }
 
 export function resolveRecords(records: SourceRecord[]): ResolutionResult {
-  const n = records.length;
-  const parent = records.map((_, i) => i);
+  const keyed = keyRecords(records);
+  const n = keyed.length;
+  const parent = keyed.map((_, i) => i);
 
   const find = (x: number): number => {
     while (parent[x] !== x) {
@@ -44,66 +67,68 @@ export function resolveRecords(records: SourceRecord[]): ResolutionResult {
   const decisions: ResolutionResult['decisions'] = [];
   const rejected: RejectedMatch[] = [];
 
-  // ---- Pass 1: strong identifiers ---------------------------------------------
-  const byEmail = new Map<string, number>();
-  const byPhone = new Map<string, number>();
-
   const setMatchedBy = (r: SourceRecord, by: string) => {
     // First strong signal wins; do not overwrite an earlier 'unique' or identifier match.
     if (r.matchedBy === 'unique') r.matchedBy = by;
   };
 
-  for (const r of records) {
+  // ---- Pass 1: strong identifiers ---------------------------------------------
+  const byEmail = new Map<string, number>();
+  const byPhone = new Map<string, number>();
+
+  for (const r of keyed) {
     if (r.email) {
       const existing = byEmail.get(r.email);
       if (existing !== undefined) {
-        if (find(existing) !== find(r.id)) {
-          union(existing, r.id);
-          decisions.push({ fromRecordId: r.id, intoPersonId: existing, by: 'email', note: `exact email ${r.email}` });
+        if (find(existing) !== find(r.index)) {
+          union(existing, r.index);
+          decisions.push({ fromRecordId: r.record.id, intoPersonId: keyed[existing].record.id, by: 'email', note: `exact email ${r.email}` });
         }
-        setMatchedBy(r, 'email');
+        setMatchedBy(r.record, 'email');
       } else {
-        byEmail.set(r.email, r.id);
+        byEmail.set(r.email, r.index);
       }
     }
     if (r.phone) {
       const existing = byPhone.get(r.phone);
       if (existing !== undefined) {
-        if (find(existing) !== find(r.id)) {
-          union(existing, r.id);
-          decisions.push({ fromRecordId: r.id, intoPersonId: existing, by: 'phone', note: `exact phone ${r.phone}` });
+        if (find(existing) !== find(r.index)) {
+          union(existing, r.index);
+          decisions.push({ fromRecordId: r.record.id, intoPersonId: keyed[existing].record.id, by: 'phone', note: `exact phone ${r.phone}` });
         }
-        setMatchedBy(r, 'phone');
+        setMatchedBy(r.record, 'phone');
       } else {
-        byPhone.set(r.phone, r.id);
+        byPhone.set(r.phone, r.index);
       }
     }
   }
 
   // ---- Build groups ------------------------------------------------------------
   const groupByRoot = new Map<number, SourceRecord[]>();
-  for (const r of records) {
-    const root = find(r.id);
+  for (const r of keyed) {
+    const root = find(r.index);
     if (!groupByRoot.has(root)) groupByRoot.set(root, []);
-    groupByRoot.get(root)!.push(r);
+    groupByRoot.get(root)!.push(r.record);
   }
   let groups: SourceRecord[][] = [...groupByRoot.values()];
 
   // ---- Pass 2: name + city ------------------------------------------------------
   // Iterate pairs of groups; merge only when the evidence rules pass.
   const tryMerge = (ga: SourceRecord[], gb: SourceRecord[]): { ok: boolean; reason?: string } => {
-    const nameA = normNameKey(ga[0]);
-    const nameB = normNameKey(gb[0]);
+    const ka = keyRecords(ga);
+    const kb = keyRecords(gb);
+    const nameA = ka[0].nameKey;
+    const nameB = kb[0].nameKey;
     if (nameA !== nameB) return { ok: false, reason: 'name differs' };
 
-    const cityA = ga[0].city;
-    const cityB = gb[0].city;
+    const cityA = ka[0].cityKey;
+    const cityB = kb[0].cityKey;
     if (cityA !== cityB) return { ok: false, reason: `city differs (${cityA} vs ${cityB})` };
 
-    const emailsA = new Set(ga.map((r) => r.email).filter(Boolean) as string[]);
-    const emailsB = new Set(gb.map((r) => r.email).filter(Boolean) as string[]);
-    const phonesA = new Set(ga.map((r) => r.phone).filter(Boolean) as string[]);
-    const phonesB = new Set(gb.map((r) => r.phone).filter(Boolean) as string[]);
+    const emailsA = new Set(ka.map((r) => r.email).filter(Boolean) as string[]);
+    const emailsB = new Set(kb.map((r) => r.email).filter(Boolean) as string[]);
+    const phonesA = new Set(ka.map((r) => r.phone).filter(Boolean) as string[]);
+    const phonesB = new Set(kb.map((r) => r.phone).filter(Boolean) as string[]);
 
     // Shared identifier would already have unioned them; if present here something's off.
     for (const e of emailsA) if (emailsB.has(e)) return { ok: false, reason: 'already linked by email' };
@@ -163,17 +188,17 @@ export function resolveRecords(records: SourceRecord[]): ResolutionResult {
       return a.source.localeCompare(b.source);
     });
 
-    const nameCandidates = sorted.map((r) => r.name);
-    const canonicalName = pickCanonicalName(nameCandidates);
+    const canonicalName = pickCanonicalName(sorted.map((r) => r.name));
 
-    const emails = [...new Set(g.map((r) => r.email).filter(Boolean) as string[])];
+    // Canonical identifiers come from the normalized keys, not raw record fields.
+    const emails = [...new Set(keyRecords(g).map((r) => r.email).filter(Boolean) as string[])];
     const email = pickCanonicalEmail(emails);
 
-    const phones = [...new Set(g.map((r) => r.phone).filter(Boolean) as string[])];
-    const phone = phones.length === 1 ? phones[0] : phones[0] ?? null;
+    const phones = [...new Set(keyRecords(g).map((r) => r.phone).filter(Boolean) as string[])];
+    const phone = phones.length ? phones[0] : null;
 
-    const cities = [...new Set(g.map((r) => r.city).filter(Boolean) as string[])];
-    const city = cities.length > 0 ? cities[0] : null;
+    const cities = [...new Set(keyRecords(g).map((r) => r.cityKey).filter(Boolean) as string[])];
+    const city = cities.length ? cities[0] : null;
 
     const expVals = g.map((r) => r.experienceYears).filter((v): v is number => v !== null);
     const ctcRecords = g.find((r) => r.ctc !== null);
@@ -204,7 +229,7 @@ export function resolveRecords(records: SourceRecord[]): ResolutionResult {
   return { people, decisions, rejected: uniqueRejected };
 }
 
-/** Prefer a full (non-abbreviated) name; ties broken by source priority (naukri first). */
+/** Prefer a full (non-abbreviated) name; ties broken by length. */
 function pickCanonicalName(names: string[]): string {
   const full = names.filter((nm) => !/^[A-Z]\.\s/.test(nm));
   const pool = full.length ? full : names;
