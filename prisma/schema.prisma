@@ -1,0 +1,95 @@
+// Prisma schema for the ConsultBae assignment.
+// Model names: Person, SourceRecord, Skill, PersonSkill, AudioSubmission, SkillClassification.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// One canonical person, produced by entity resolution across the 3 CSV sources.
+model Person {
+  id              Int      @id @default(autoincrement())
+  canonicalName   String
+  email           String?
+  phone           String?
+  city            String?
+  experienceYears Float?
+  currentCtc      Float?
+  ctcMalformed    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sourceRecords    SourceRecord[]
+  skills           PersonSkill[]
+  audioSubmissions AudioSubmission[]
+  classifications  SkillClassification[]
+}
+
+// Every raw row from every source, preserved verbatim (JSON) for auditability.
+model SourceRecord {
+  id        Int      @id @default(autoincrement())
+  personId  Int
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  source    String
+  sourceRow Int
+  rawData   Json
+  matchedBy String
+  createdAt DateTime @default(now())
+
+  @@unique([source, sourceRow])
+}
+
+// Normalized skill vocabulary (lowercased, trimmed, deduped).
+model Skill {
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  personSkills PersonSkill[]
+}
+
+// Many-to-many Person <-> Skill, tracking which source contributed the skill.
+model PersonSkill {
+  personId Int
+  skillId  Int
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  skill    Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([personId, skillId])
+}
+
+// Audio app submissions. personId is resolved at submit time when phone/name matches a person.
+model AudioSubmission {
+  id               Int      @id @default(autoincrement())
+  personId         Int?
+  person           Person?  @relation(fields: [personId], references: [id])
+  submitterName    String
+  submitterPhone   String?
+  filePath         String
+  originalFilename String
+  mimeType         String?
+  sizeBytes        Int
+  durationSeconds  Float?
+  sampleRateHz     Int?
+  bitrateKbps      Float?
+  loudnessDb       Float?
+  noiseScore       Float?
+  qualityScore     Float?
+  createdAt        DateTime @default(now())
+}
+
+// Skill category written back by the n8n LLM workflow.
+model SkillClassification {
+  id         Int      @id @default(autoincrement())
+  personId   Int
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  category   String
+  confidence Float?
+  reason     String?
+  source     String   @default("n8n")
+  createdAt  DateTime @default(now())
+
+  @@unique([personId, source])
+}

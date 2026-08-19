@@ -1,0 +1,60 @@
+{
+  "name": "consultbae-assignment",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ConsultBae AI Automation take-home assignment: 3-CSV merge, n8n automation, and an audio collection app.",
+  "scripts": {
+    "inspect": "tsx scripts/inspect-data.ts",
+    "ingest": "tsx scripts/ingest.ts",
+    "migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "api": "tsx apps/api/src/server.ts",
+    "api:dev": "tsx watch apps/api/src/server.ts",
+    "web": "vite --config apps/web/vite.config.ts",
+    "web:build": "tsc -p apps/web/tsconfig.json --noEmit && vite build --config apps/web/vite.config.ts",
+    "dev": "concurrently -n api,web -c blue,green \"npm run api:dev\" \"npm run web\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "n8n": "n8n",
+    "ffmpeg:generate-test-audio": "tsx scripts/generate-test-audio.ts"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/multipart": "^8.3.0",
+    "@fastify/static": "^8.0.0",
+    "@prisma/client": "^5.22.0",
+    "fastify": "^5.2.0",
+    "fast-xml-parser": "^4.5.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/fluent-ffmpeg": "^2.1.26",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "postcss": "^8.4.49",
+    "prisma": "^5.22.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.15",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vitest": "^2.1.8"
+  },
+  "allowScripts": {
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "prisma@5.22.0": true,
+    "esbuild@0.25.12": true
+  }
+}

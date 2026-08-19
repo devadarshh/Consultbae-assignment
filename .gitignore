@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+
+# environment / secrets
+.env
+.env.local
+*.local
+
+# uploads (never commit audio files)
+uploads/*
+!uploads/.gitkeep
+
+# logs / misc
+*.log
+.DS_Store
+
+# prisma
+prisma/dev.db
+
+# editor
+.vscode/
+.idea/
