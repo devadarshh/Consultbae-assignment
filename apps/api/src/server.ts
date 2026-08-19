@@ -18,13 +18,14 @@ async function main() {
 
   // Centralized error handling: never leak stack traces to clients.
   app.setErrorHandler((err, _req, reply) => {
-    if (err.statusCode === 413 || err.code === 'FST_REQ_FILE_TOO_LARGE') {
+    const e = err as { statusCode?: number; code?: string; validation?: unknown };
+    if (e.statusCode === 413 || e.code === 'FST_REQ_FILE_TOO_LARGE') {
       return reply.code(413).send({ error: 'File too large' });
     }
-    if (err.validation) {
+    if (e.validation) {
       return reply.code(400).send({ error: 'Invalid request' });
     }
-    if ((err as Error & { code?: string }).code === 'FST_REQ_BODY_TOO_LARGE') {
+    if (e.code === 'FST_REQ_BODY_TOO_LARGE') {
       return reply.code(413).send({ error: 'Body too large' });
     }
     app.log.error(err);

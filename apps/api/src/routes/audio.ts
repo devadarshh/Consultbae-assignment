@@ -32,13 +32,20 @@ function sanitizeExt(filename: string): string {
   return ALLOWED_EXTENSIONS.has(ext) ? ext : '';
 }
 
+function fieldValue(fields: Record<string, unknown>, key: string): string {
+  const v = fields[key];
+  if (Array.isArray(v)) return String(v[0] ?? '');
+  if (v && typeof v === 'object' && 'value' in v) return String((v as { value: unknown }).value);
+  return '';
+}
+
 export function registerAudioRoutes(app: FastifyInstance) {
   app.post('/api/audio-submissions', async (req, reply) => {
     const data = await req.file();
     if (!data) return reply.code(400).send({ error: 'No multipart file received' });
 
-    const nameRaw = data.fields.name ? String(data.fields.name.value) : '';
-    const phoneRaw = data.fields.phone ? String(data.fields.phone.value) : '';
+    const nameRaw = fieldValue(data.fields as Record<string, unknown>, 'name');
+    const phoneRaw = fieldValue(data.fields as Record<string, unknown>, 'phone');
 
     // Validate fields (never trust client metadata for the audio properties themselves).
     const parsed = audioSubmissionSchema.safeParse({ name: nameRaw, phone: phoneRaw });
