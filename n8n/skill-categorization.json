@@ -1,0 +1,169 @@
+{
+  "name": "ConsultBae: Skill Categorization",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ed77d8ed-0f5f-4b75-a704-128def325cfd",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-320, 0]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "0d1f462b-4e1b-465a-b492-4217b8071f17",
+      "name": "Weekly Schedule (Mon 09:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-320, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.id AS \"personId\", p.\"canonicalName\" AS name, p.city, COALESCE(array_agg(s.name ORDER BY s.name) FILTER (WHERE s.name IS NOT NULL), '{}') AS skills FROM \"Person\" p LEFT JOIN \"PersonSkill\" ps ON ps.\"personId\" = p.id LEFT JOIN \"Skill\" s ON s.id = ps.\"skillId\" LEFT JOIN \"SkillClassification\" sc ON sc.\"personId\" = p.id AND sc.source = 'n8n' WHERE sc.id IS NULL GROUP BY p.id, p.\"canonicalName\", p.city ORDER BY p.\"canonicalName\"",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "c4b6c1a4-4f6a-4f8e-8a3b-postgrescred001",
+          "name": "ConsultBae Postgres"
+        }
+      },
+      "id": "7b0acd49-5b9a-4cfd-8397-8097c64ed735",
+      "name": "Read people without classification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GEMINI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gemini-3.6-flash', temperature: 0, max_tokens: 8000, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'You are a recruiter skill classifier for a gig-work platform. For each candidate, categorize their skills into exactly one category: engineering, data, design, operations, sales, support, management, or other. Respond ONLY with a JSON object of the form {\"candidates\": [{\"id\": number, \"category\": string, \"confidence\": number, \"reason\": string}]} where id is the candidate id you received, confidence is a number between 0 and 1, and reason is one short sentence.' }, { role: 'user', content: 'Classify these candidates: ' + JSON.stringify($input.all().map(i => ({ id: i.json.personId, name: i.json.name, city: i.json.city, skills: i.json.skills }))) } ] }) }}",
+        "options": {}
+      },
+      "id": "134c6699-46a5-4dbf-9735-4f77ef2a2eb6",
+      "name": "LLM: classify skills",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.choices?.[0]?.message?.content;\nif (!raw) { throw new Error('Empty LLM response'); }\nlet parsed;\ntry { parsed = JSON.parse(raw); }\ncatch (e) { const m = raw.match(/\\{[\\s\\S]*\\}/); if (m) { parsed = JSON.parse(m[0]); } else { throw new Error('LLM did not return JSON: ' + raw.slice(0, 300)); } }\nconst list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.candidates) ? parsed.candidates : []);\nif (!list.length) { throw new Error('No candidates in LLM response'); }\nconst allowed = ['engineering', 'data', 'design', 'operations', 'sales', 'support', 'management', 'other'];\nconst out = [];\nfor (const c of list) {\n  const category = allowed.includes(String(c.category || '').toLowerCase()) ? String(c.category).toLowerCase() : 'other';\n  const confidence = Math.round(Math.min(1, Math.max(0, Number(c.confidence) || 0)) * 1000) / 1000;\n  const reason = String(c.reason || '').replace(/[\\r\\n]+/g, ' ').replace(/'/g, \"''\").slice(0, 500);\n  out.push({ json: { personId: Number(c.id), category, confidence, reason } });\n}\nreturn out;"
+      },
+      "id": "c3b9124c-1a70-40fc-bc52-a74b0bb5f433",
+      "name": "Parse & validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO \"SkillClassification\" (\"personId\", category, confidence, reason, source, \"createdAt\") VALUES ({{ $json.personId }}, '{{ $json.category }}', {{ $json.confidence }}, '{{ $json.reason }}', 'n8n', NOW()) ON CONFLICT (\"personId\", \"source\") DO UPDATE SET category = EXCLUDED.category, confidence = EXCLUDED.confidence, reason = EXCLUDED.reason",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "c4b6c1a4-4f6a-4f8e-8a3b-postgrescred001",
+          "name": "ConsultBae Postgres"
+        }
+      },
+      "id": "f7f4fd69-50d6-4418-8d27-bb8f2e99cbce",
+      "name": "Write classification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [780, 0]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read people without classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Schedule (Mon 09:00)": {
+      "main": [
+        [
+          {
+            "node": "Read people without classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read people without classification": {
+      "main": [
+        [
+          {
+            "node": "LLM: classify skills",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM: classify skills": {
+      "main": [
+        [
+          {
+            "node": "Parse & validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & validate": {
+      "main": [
+        [
+          {
+            "node": "Write classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "instanceId": ""
+  }
+}
