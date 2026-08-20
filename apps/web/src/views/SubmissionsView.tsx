@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { formatBytes, formatDuration, listSubmissions, type AudioSubmission } from '../api';
+import { formatBytes, formatDuration, getApiUrl, listSubmissions, type AudioSubmission } from '../api';
 
 export default function SubmissionsView({ refreshKey }: { refreshKey: number }) {
   const [rows, setRows] = useState<AudioSubmission[] | null>(null);
@@ -61,7 +61,7 @@ export default function SubmissionsView({ refreshKey }: { refreshKey: number }) 
                   {new Date(r.createdAt).toLocaleString()}
                 </td>
                 <td className="px-4 py-2">
-                  <audio controls preload="none" className="h-8 w-40" src={r.fileUrl} />
+                  <audio controls preload="none" className="h-8 w-40" src={getApiUrl(r.fileUrl)} />
                 </td>
               </tr>
             ))}

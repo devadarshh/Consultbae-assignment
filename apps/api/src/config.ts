@@ -10,9 +10,17 @@ function int(v: string | undefined, fallback: number): number {
 const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR ?? './uploads');
 mkdirSync(UPLOAD_DIR, { recursive: true });
 
+const webOriginEnv = process.env.WEB_ORIGIN ?? '*';
+const webOrigin: boolean | string | string[] =
+  webOriginEnv === '*'
+    ? true
+    : webOriginEnv.includes(',')
+      ? webOriginEnv.split(',').map((s) => s.trim())
+      : webOriginEnv;
+
 export const config = {
   port: int(process.env.PORT, 3001),
-  webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+  webOrigin,
   uploadDir: UPLOAD_DIR,
   maxUploadBytes: int(process.env.MAX_UPLOAD_BYTES, 25 * 1024 * 1024), // 25 MB default
   llm: {

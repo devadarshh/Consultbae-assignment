@@ -29,6 +29,14 @@ export interface ApiError {
   error: string;
 }
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+export function getApiUrl(path: string): string {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
 async function handle<T>(resPromise: Promise<Response>): Promise<T> {
   const res = await resPromise;
   if (!res.ok) {
@@ -45,7 +53,7 @@ async function handle<T>(resPromise: Promise<Response>): Promise<T> {
 }
 
 export function listSubmissions(): Promise<AudioSubmission[]> {
-  return handle<AudioSubmission[]>(fetch('/api/audio-submissions'));
+  return handle<AudioSubmission[]>(fetch(getApiUrl('/api/audio-submissions')));
 }
 
 export interface SubmitResult {
@@ -60,7 +68,7 @@ export async function submitAudio(name: string, phone: string, file: File): Prom
   form.append('audio', file);
 
   const submission = await handle<AudioSubmission>(
-    fetch('/api/audio-submissions', { method: 'POST', body: form }),
+    fetch(getApiUrl('/api/audio-submissions'), { method: 'POST', body: form }),
   );
   return { submission, linkedPerson: submission.personId != null };
 }
